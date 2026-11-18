@@ -1,17 +1,31 @@
 #!/usr/bin/env python3
-"""news-image-20261117 -- "Sum up 17 November's world news in one image".
+"""news-image-20261117 v2 -- "Sum up 17 November's world news in one image".
 
-A newspaper front page, THE WORLD, TUESDAY 17 NOVEMBER 2026, with four
-illustrated panels, one per story:
+A denser newspaper front page, THE WORLD, TUESDAY 17 NOVEMBER 2026:
+28 stories in one image.
 
+  Masthead + a small world map (red numbered dots mark the four anchor
+  stories, dark dots mark brief locations).
+  Four illustrated anchor panels (compact redraws of v1):
   1. US STRIKES IRAN      -- jets hit a missile site on Qeshm Island;
                              Iran drones a US radar base in Bahrain.
   2. KERCH BRIDGE FALLS   -- Ukrainian drones hit the Kerch Bridge for a
                              second day; a road section falls into the strait.
-  3. NVIDIA RECORD, NO RETURN -- revenue above $115 billion, but ousted
+  3. NVIDIA RECORD, NO RETURN -- revenue $115.8 billion, but ousted
                              CEO Jensen Huang will not be reinstated.
   4. TRUMP TO SHENZHEN    -- Trump heads to Shenzhen for APEC talks with
                              Xi and Putin (Quad talks in Manila first).
+  24 briefs (headline + one line), each verified as happening or first
+  reported on 17 November 2026: Gaza aid plea; Depardieu admits guilt;
+  Japan scrambles jets; Houthis advance in Yemen; Russian plane crashes
+  in Kemerovo; tanker sinks off Bulgaria; France strikes over living
+  costs; Moldova closes airspace; US loses measles status; settlers kill
+  a woman near Jericho; Haiti rallies for Bukele; Mongolia president
+  resigns; Houthis hit Saudi pipeline; mines hit more Hormuz ships; oil
+  eases as US stocks rise; US curbs China AI chips; US soldier held in
+  Britain; Quad seals minerals pacts; India-Japan 2+2 talks; Xi pushes
+  open trade; Netanyahu faces vote probe; France role in Ukraine
+  revealed; Huang to face Congress; crypto slides in East Europe.
 
 Pure standard library. No network, no randomness, no time, no paid keys.
 Writes $MAKEFUN_OUTPUT_DIR/entry.png (default /output/entry.png):
@@ -39,8 +53,11 @@ GREEN = (31, 160, 85)
 GOLD = (212, 175, 55)
 SKY = (168, 208, 232)
 SEA = (46, 111, 168)
+MAPSEA = (150, 190, 215)
+LAND = (168, 160, 120)
 ORANGE = (217, 123, 46)
 SUN = (244, 196, 96)
+GREY = (80, 80, 80)
 
 # ---------------------------------------------------------------- font ----
 # Hand-checked 5x7 bitmap font. Every glyph below was verified as ASCII art
@@ -122,6 +139,9 @@ class Canvas:
     def hline(self, x, y, length, t, c):
         self.rect(x, y, length, t, c)
 
+    def vline(self, x, y, length, t, c):
+        self.rect(x, y, t, length, c)
+
     def circle(self, cx, cy, r, c):
         for yy in range(cy - r, cy + r + 1):
             dy = yy - cy
@@ -200,203 +220,270 @@ def write_png(cv, path):
         f.write(png)
 
 
-# -------------------------------------------------------------- scenes ----
+# -------------------------------------------------------------- map -------
+# Equirectangular map, lon -170..190, lat 75..-55, over the map rect.
+MAP_X, MAP_Y, MAP_W, MAP_H = 24, 168, 976, 112
+
+
+def mx(lon):
+    return MAP_X + int((lon + 170) / 360.0 * MAP_W)
+
+
+def my(lat):
+    return MAP_Y + int((75 - lat) / 130.0 * MAP_H)
+
+
+def lonlat_poly(cv, pts, c):
+    cv.polygon([(mx(lon), my(lat)) for lon, lat in pts], c)
+
+
+CONTINENTS = [
+    # North America
+    [(-168, 66), (-150, 70), (-130, 71), (-110, 68), (-95, 73), (-80, 70),
+     (-75, 60), (-70, 45), (-80, 32), (-90, 30), (-97, 26), (-105, 20),
+     (-115, 28), (-125, 40), (-140, 58), (-160, 60)],
+    # Greenland
+    [(-45, 60), (-30, 70), (-20, 75), (-40, 80), (-55, 75)],
+    # South America
+    [(-80, 10), (-75, 5), (-60, -5), (-50, -10), (-40, -20), (-35, -30),
+     (-50, -35), (-60, -40), (-70, -50), (-75, -40), (-80, -20)],
+    # Europe
+    [(-10, 36), (-5, 44), (0, 50), (10, 55), (20, 60), (30, 65), (35, 60),
+     (40, 55), (30, 45), (25, 40), (20, 36), (10, 38), (0, 36)],
+    # Africa
+    [(-17, 15), (-10, 30), (0, 35), (10, 37), (20, 32), (30, 31), (35, 28),
+     (40, 15), (45, 10), (50, 10), (45, 0), (40, -10), (35, -20), (30, -30),
+     (20, -35), (15, -25), (12, -15), (10, 0), (5, 5), (-5, 5), (-10, 10)],
+    # Asia
+    [(40, 70), (60, 72), (80, 73), (100, 76), (120, 72), (140, 72),
+     (160, 70), (170, 66), (160, 60), (145, 55), (140, 45), (130, 35),
+     (125, 30), (120, 25), (110, 20), (105, 10), (100, 5), (95, 15),
+     (90, 20), (80, 10), (75, 8), (70, 20), (60, 25), (50, 30), (45, 40),
+     (40, 50)],
+    # Australia
+    [(113, -22), (120, -15), (130, -12), (140, -15), (150, -25), (150, -37),
+     (140, -38), (130, -32), (120, -35), (113, -30)],
+    # Japan
+    [(130, 31), (132, 33), (138, 36), (141, 39), (142, 44), (140, 45),
+     (136, 38), (131, 33)],
+    # Britain
+    [(-5, 50), (-3, 53), (-1, 55), (-2, 58), (-4, 57), (-5, 53)],
+]
+
+# Anchor dots: (lon, lat, number, label, label dx, label dy)
+ANCHOR_DOTS = [
+    (56.5, 26.8, "1", "QESHM", 12, -4),
+    (36.5, 45.3, "2", "KERCH", 12, -4),
+    (-122.0, 37.4, "3", "NVIDIA", 12, -4),
+    (114.1, 22.5, "4", "SHENZHEN", -62, 10),
+]
+# Brief-location dots: (lon, lat)
+BRIEF_DOTS = [
+    (139.7, 35.7),    # Tokyo
+    (2.35, 48.85),    # Paris
+    (45.0, 12.8),     # Aden
+    (28.8, 47.0),     # Chisinau
+    (-0.1, 51.5),     # London
+    (106.9, 47.9),    # Ulaanbaatar
+    (-72.3, 18.5),    # Port-au-Prince
+]
+
+
+def draw_map(cv):
+    cv.rect(MAP_X, MAP_Y, MAP_W, MAP_H, MAPSEA)
+    for poly in CONTINENTS:
+        lonlat_poly(cv, poly, LAND)
+    cv.frame(MAP_X, MAP_Y, MAP_W, MAP_H, 2, INK)
+    cv.text(MAP_X + 8, MAP_Y + 4, "THE WORLD AT A GLANCE", 1, INK)
+    for lon, lat in BRIEF_DOTS:
+        cv.circle(mx(lon), my(lat), 4, INK)
+    for lon, lat, num, label, dx, dy in ANCHOR_DOTS:
+        x, y = mx(lon), my(lat)
+        cv.circle(x, y, 9, RED)
+        cv.circle(x, y, 7, RED)
+        cv.text(x - 2, y - 3, num, 1, WHITE)
+        cv.text(x + dx, y + dy, label, 1, INK)
+
+
+# ---------------------------------------------------- compact scenes -----
+# Each scene draws in a 472x128 box (sx, sy).
 def scene_iran(cv, sx, sy, sw, sh):
-    """Panel 1: dusk sky, Qeshm Island missile site exploding, US jet,
+    """Compact panel 1: dusk sky, Qeshm Island explosion, US jet,
     Bahrain radar base droned at right."""
-    cv.rect(sx, sy, sw, sh, (232, 163, 76))            # dusk sky
-    cv.rect(sx, sy + 90, sw, 60, ORANGE)
-    cv.rect(sx, sy + 150, sw, 60, (184, 92, 40))
-    cv.circle(sx + sw - 70, sy + 55, 30, SUN)          # low sun
-    cv.rect(sx, sy + sh - 64, sw, 64, SEA)             # strait
-    for wx in range(sx + 10, sx + sw - 10, 46):         # wave ticks
-        cv.hline(wx, sy + sh - 44, 26, 3, WHITE)
-        cv.hline(wx + 12, sy + sh - 22, 26, 3, WHITE)
+    cv.rect(sx, sy, sw, sh, (232, 163, 76))
+    cv.rect(sx, sy + 44, sw, 30, ORANGE)
+    cv.rect(sx, sy + 74, sw, 34, (184, 92, 40))
+    cv.circle(sx + sw - 52, sy + 26, 18, SUN)
+    cv.rect(sx, sy + sh - 20, sw, 20, SEA)
+    cv.hline(sx + 12, sy + sh - 12, 24, 2, WHITE)
+    cv.hline(sx + 60, sy + sh - 7, 24, 2, WHITE)
     # Qeshm Island (left)
-    cv.polygon([(sx + 20, sy + sh - 64), (sx + 60, sy + sh - 118),
-                (sx + 190, sy + sh - 118), (sx + 230, sy + sh - 64)],
+    cv.polygon([(sx + 16, sy + sh - 20), (sx + 44, sy + sh - 56),
+                (sx + 150, sy + sh - 56), (sx + 180, sy + sh - 20)],
                (74, 96, 52))
-    # missile launcher + missile on the island
-    cv.rect(sx + 96, sy + sh - 128, 34, 10, (40, 40, 40))
-    cv.line(sx + 113, sy + sh - 128, sx + 132, sy + sh - 168, 7, (60, 60, 60))
-    cv.circle(sx + 134, sy + sh - 172, 6, (200, 200, 200))
+    # missile launcher + missile
+    cv.rect(sx + 74, sy + sh - 62, 26, 7, (40, 40, 40))
+    cv.line(sx + 87, sy + sh - 62, sx + 100, sy + sh - 84, 5, (60, 60, 60))
+    cv.circle(sx + 101, sy + sh - 86, 4, (200, 200, 200))
     # explosion starburst over the site
-    ex, ey = sx + 128, sy + sh - 190
-    cv.circle(ex, ey, 34, (255, 120, 20))
-    cv.circle(ex, ey, 22, (255, 190, 40))
-    cv.circle(ex, ey, 11, (255, 240, 160))
-    for dx, dy in [(-38, -14), (38, -16), (-30, 22), (34, 20), (0, -42)]:
-        cv.polygon([(ex, ey), (ex + dx - 6, ey + dy),
-                    (ex + dx + 6, ey + dy)], (255, 120, 20))
+    ex, ey = sx + 100, sy + 34
+    cv.circle(ex, ey, 22, (255, 120, 20))
+    cv.circle(ex, ey, 14, (255, 190, 40))
+    cv.circle(ex, ey, 7, (255, 240, 160))
+    for dx, dy in [(-24, -10), (24, -11), (-19, 14), (22, 13), (0, -27)]:
+        cv.polygon([(ex, ey), (ex + dx - 4, ey + dy),
+                    (ex + dx + 4, ey + dy)], (255, 120, 20))
     # smoke column
-    for cx, cy, r in [(sx + 96, sy + 62, 12), (sx + 84, sy + 44, 15),
-                      (sx + 70, sy + 26, 18)]:
+    for cx, cy, r in [(sx + 76, sy + 26, 8), (sx + 66, sy + 14, 10)]:
         cv.circle(cx, cy, r, (90, 90, 90))
     # US jet, top left, flying right with contrail
-    jx, jy = sx + 30, sy + 34
-    cv.polygon([(jx, jy), (jx + 74, jy + 10), (jx, jy + 20)], (30, 30, 34))
-    cv.polygon([(jx + 26, jy + 8), (jx + 44, jy - 12), (jx + 52, jy + 8)],
+    jx, jy = sx + 14, sy + 12
+    cv.polygon([(jx, jy), (jx + 52, jy + 7), (jx, jy + 14)], (30, 30, 34))
+    cv.polygon([(jx + 18, jy + 5), (jx + 30, jy - 8), (jx + 36, jy + 5)],
                (30, 30, 34))
-    cv.polygon([(jx + 26, jy + 12), (jx + 40, jy + 28), (jx + 48, jy + 12)],
-               (30, 30, 34))
-    cv.line(jx - 58, jy + 4, jx - 2, jy + 8, 3, WHITE)
-    # Bahrain radar base (right): small islet, dome + dish
-    cv.polygon([(sx + sw - 150, sy + sh - 64), (sx + sw - 130, sy + sh - 96),
-                (sx + sw - 40, sy + sh - 96), (sx + sw - 16, sy + sh - 64)],
+    cv.line(sx + 2, jy + 3, jx - 2, jy + 6, 2, WHITE)
+    # Bahrain radar base (right): islet, dome + dish
+    cv.polygon([(sx + sw - 118, sy + sh - 20), (sx + sw - 104, sy + sh - 46),
+                (sx + sw - 34, sy + sh - 46), (sx + sw - 14, sy + sh - 20)],
                (120, 110, 88))
-    cv.circle(sx + sw - 66, sy + sh - 96, 20, (220, 220, 220))
-    cv.rect(sx + sw - 86, sy + sh - 96, 40, 6, (220, 220, 220))
-    cv.line(sx + sw - 108, sy + sh - 100, sx + sw - 128, sy + sh - 132,
-            5, (60, 60, 60))
-    cv.circle(sx + sw - 130, sy + sh - 134, 7, (200, 200, 200))
-    # three drones closing in on the base
-    for dx, dy in [(sx + sw - 170, sy + 66), (sx + sw - 120, sy + 44),
-                   (sx + sw - 84, sy + 84)]:
-        cv.circle(dx, dy, 5, INK)
-        cv.line(dx - 10, dy - 6, dx + 10, dy + 6, 2, INK)
-        cv.line(dx - 10, dy + 6, dx + 10, dy - 6, 2, INK)
+    cv.circle(sx + sw - 54, sy + sh - 46, 14, (220, 220, 220))
+    cv.rect(sx + sw - 68, sy + sh - 46, 30, 4, (220, 220, 220))
+    cv.line(sx + sw - 86, sy + sh - 48, sx + sw - 100, sy + sh - 66,
+            4, (60, 60, 60))
+    cv.circle(sx + sw - 101, sy + sh - 68, 5, (200, 200, 200))
+    # two drones closing in on the base
+    for dx, dy in [(sx + sw - 140, sy + 30), (sx + sw - 100, sy + 18)]:
+        cv.circle(dx, dy, 4, INK)
+        cv.line(dx - 8, dy - 5, dx + 8, dy + 5, 2, INK)
+        cv.line(dx - 8, dy + 5, dx + 8, dy - 5, 2, INK)
 
 
 def scene_kerch(cv, sx, sy, sw, sh):
-    """Panel 2: Kerch Bridge over the strait, middle section blown out
-    and falling, drones overhead."""
-    cv.rect(sx, sy, sw, sh, (196, 210, 222))           # pale sky
-    cv.ellipse(sx + 70, sy + 34, 46, 12, WHITE)
-    cv.ellipse(sx + sw - 90, sy + 52, 54, 13, WHITE)
-    cv.rect(sx, sy + 110, sw, sh - 110, SEA)           # strait
-    for wx in range(sx + 8, sx + sw - 8, 52):
-        cv.hline(wx, sy + 168, 30, 3, WHITE)
-        cv.hline(wx + 16, sy + 226, 30, 3, WHITE)
-        cv.hline(wx + 4, sy + 268, 30, 3, WHITE)
-    deck_y = sy + 108
+    """Compact panel 2: Kerch Bridge over the strait, middle section
+    blown out and falling, drones overhead."""
+    cv.rect(sx, sy, sw, sh, (196, 210, 222))
+    cv.ellipse(sx + 60, sy + 16, 34, 8, WHITE)
+    cv.ellipse(sx + sw - 70, sy + 26, 40, 9, WHITE)
+    cv.rect(sx, sy + 56, sw, sh - 56, SEA)
+    cv.hline(sx + 10, sy + 84, 26, 2, WHITE)
+    cv.hline(sx + 30, sy + 108, 26, 2, WHITE)
+    deck_y = sy + 54
     # bridge deck, left and right of the gap
-    cv.rect(sx + 8, deck_y, 168, 16, (90, 90, 90))
-    cv.rect(sx + sw - 176, deck_y, 168, 16, (90, 90, 90))
-    for dx in range(sx + 14, sx + 176, 24):             # lane dashes
-        cv.rect(dx, deck_y + 7, 12, 2, (255, 210, 60))
+    cv.rect(sx + 8, deck_y, 168, 12, (90, 90, 90))
+    cv.rect(sx + sw - 176, deck_y, 168, 12, (90, 90, 90))
+    for dx in range(sx + 14, sx + 176, 24):
+        cv.rect(dx, deck_y + 5, 12, 2, (255, 210, 60))
     for dx in range(sx + sw - 170, sx + sw - 8, 24):
-        cv.rect(dx, deck_y + 7, 12, 2, (255, 210, 60))
+        cv.rect(dx, deck_y + 5, 12, 2, (255, 210, 60))
     # towers + cables
     for tx in (sx + 60, sx + sw - 76):
-        cv.rect(tx, deck_y - 62, 12, 62, (70, 70, 70))
-        cv.line(tx + 6, deck_y - 62, tx - 70, deck_y, 2, (140, 140, 140))
-        cv.line(tx + 6, deck_y - 62, tx + 82, deck_y, 2, (140, 140, 140))
+        cv.rect(tx, deck_y - 34, 10, 34, (70, 70, 70))
+        cv.line(tx + 5, deck_y - 34, tx - 60, deck_y, 2, (140, 140, 140))
+        cv.line(tx + 5, deck_y - 34, tx + 70, deck_y, 2, (140, 140, 140))
     # falling road section, tilted, mid-gap
-    cv.polygon([(sx + 196, deck_y + 30), (sx + 252, deck_y + 44),
-                (sx + 240, deck_y + 62), (sx + 186, deck_y + 48)],
+    cv.polygon([(sx + 196, deck_y + 16), (sx + 248, deck_y + 26),
+                (sx + 238, deck_y + 40), (sx + 188, deck_y + 30)],
                (90, 90, 90))
-    cv.rect(sx + 210, deck_y + 40, 26, 4, (255, 210, 60))
+    cv.rect(sx + 208, deck_y + 22, 22, 3, (255, 210, 60))
     # splash where the section hits the water
-    cv.ellipse(sx + 224, sy + 196, 52, 16, WHITE)
-    cv.ellipse(sx + 224, sy + 188, 30, 10, WHITE)
-    for dx, dy in [(-40, -16), (-16, -26), (12, -28), (38, -14)]:
-        cv.circle(sx + 224 + dx, sy + 190 + dy, 4, WHITE)
+    cv.ellipse(sx + 222, sy + 104, 40, 11, WHITE)
+    cv.ellipse(sx + 222, sy + 98, 24, 7, WHITE)
+    for dx, dy in [(-30, -11), (-12, -18), (10, -19), (28, -10)]:
+        cv.circle(sx + 222 + dx, sy + 100 + dy, 3, WHITE)
     # smoke at the break points
-    for cx, cy, r in [(sx + 176, deck_y - 8, 13), (sx + 164, deck_y - 26, 16),
-                      (sx + 292, deck_y - 6, 12), (sx + 304, deck_y - 24, 15)]:
+    for cx, cy, r in [(sx + 176, deck_y - 4, 9), (sx + 166, deck_y - 16, 11),
+                      (sx + 292, deck_y - 3, 8), (sx + 302, deck_y - 14, 10)]:
         cv.circle(cx, cy, r, (110, 110, 110))
     # blast flash at the gap
-    cv.circle(sx + 232, deck_y - 2, 14, (255, 190, 40))
-    cv.circle(sx + 232, deck_y - 2, 7, (255, 240, 160))
-    # three drones above the bridge
-    for dx, dy in [(sx + 120, sy + 30), (sx + 232, sy + 18),
-                   (sx + 340, sy + 40)]:
-        cv.circle(dx, dy, 5, INK)
-        cv.line(dx - 11, dy - 7, dx + 11, dy + 7, 2, INK)
-        cv.line(dx - 11, dy + 7, dx + 11, dy - 7, 2, INK)
+    cv.circle(sx + 232, deck_y, 10, (255, 190, 40))
+    cv.circle(sx + 232, deck_y, 5, (255, 240, 160))
+    # two drones above the bridge
+    for dx, dy in [(sx + 120, sy + 14), (sx + 330, sy + 20)]:
+        cv.circle(dx, dy, 4, INK)
+        cv.line(dx - 8, dy - 5, dx + 8, dy + 5, 2, INK)
+        cv.line(dx - 8, dy + 5, dx + 8, dy - 5, 2, INK)
 
 
 def scene_nvidia(cv, sx, sy, sw, sh):
-    """Panel 3: green chip, record sales bars climbing, red NO RETURN
-    banner, empty CEO chair."""
+    """Compact panel 3: green chip, record sales bars climbing, red
+    NO RETURN banner, empty CEO chair."""
     cv.rect(sx, sy, sw, sh, DARKGREEN)
     # chip, left
-    cx, cy = sx + 34, sy + 26
-    cv.rect(cx, cy, 150, 104, GREEN)
-    cv.frame(cx, cy, 150, 104, 4, (8, 60, 36))
-    for i in range(4):                                  # pins
-        cv.rect(cx - 12, cy + 16 + i * 26, 12, 8, GOLD)
-        cv.rect(cx + 150, cy + 16 + i * 26, 12, 8, GOLD)
-    cv.rect(cx + 52, cy + 36, 46, 32, (8, 60, 36))
-    cv.text_c(cx + 75, cy + 42, "NV", 3, GOLD)
-    # record sales figure, gold, under the chip
-    cv.text_c(sx + 109, sy + 148, "$115BN", 4, GOLD)
-    cv.text_c(sx + 109, sy + 184, "SALES", 3, WHITE)
-    # rising bars, right; trend arrow kept below the RECORD/QUARTER text
-    bx, by = sx + 250, sy + 130
-    for i, bh in enumerate((34, 56, 82, 112)):
-        cv.rect(bx + i * 48, by - bh, 34, bh, (120, 220, 150))
-    cv.line(bx - 8, by + 2, bx + 186, by - 80, 5, GOLD)
-    cv.polygon([(bx + 186, by - 80), (bx + 160, by - 80),
-                (bx + 186, by - 58)], GOLD)
-    cv.text_c(sx + 348, sy + 26, "RECORD", 3, WHITE)
-    cv.text_c(sx + 348, sy + 52, "QUARTER", 3, WHITE)
-    # empty CEO chair, bottom right
-    chx, chy = sx + 330, sy + 168
-    cv.rect(chx, chy, 8, 74, (10, 10, 10))             # back post
-    cv.rect(chx, chy, 58, 8, (10, 10, 10))             # back top
-    cv.rect(chx, chy + 66, 78, 10, (10, 10, 10))       # seat
-    cv.rect(chx + 6, chy + 76, 7, 46, (10, 10, 10))    # legs
-    cv.rect(chx + 64, chy + 76, 7, 46, (10, 10, 10))
-    cv.rect(chx + 6, chy + 104, 65, 6, (10, 10, 10))
+    cx, cy = sx + 22, sy + 10
+    cv.rect(cx, cy, 110, 60, GREEN)
+    cv.frame(cx, cy, 110, 60, 3, (8, 60, 36))
+    for i in range(3):
+        cv.rect(cx - 9, cy + 10 + i * 18, 9, 6, GOLD)
+        cv.rect(cx + 110, cy + 10 + i * 18, 9, 6, GOLD)
+    cv.rect(cx + 38, cy + 19, 34, 22, (8, 60, 36))
+    cv.text_c(cx + 55, cy + 24, "NV", 2, GOLD)
+    # record sales figure under the chip, clear of the banner
+    cv.text_c(sx + 77, sy + 76, "$115BN", 3, GOLD)
+    # rising bars, right
+    bx, by = sx + 240, sy + 74
+    for i, bh in enumerate((20, 32, 46, 60)):
+        cv.rect(bx + i * 42, by - bh, 30, bh, (120, 220, 150))
+    cv.line(bx - 6, by + 2, bx + 158, by - 44, 4, GOLD)
+    cv.polygon([(bx + 158, by - 44), (bx + 136, by - 44),
+                (bx + 158, by - 26)], GOLD)
+    cv.text_c(sx + 320, sy + 6, "RECORD", 2, WHITE)
+    cv.text_c(sx + 320, sy + 24, "QUARTER", 2, WHITE)
+    # empty CEO chair, between chip and bars, above the banner
+    chx, chy = sx + 150, sy + 78
+    cv.rect(chx, chy, 6, 24, (10, 10, 10))             # back post
+    cv.rect(chx, chy, 40, 6, (10, 10, 10))             # back top
+    cv.rect(chx, chy + 20, 54, 6, (10, 10, 10))        # seat
     # red NO RETURN banner across the bottom
-    cv.rect(sx, sy + sh - 46, sw, 46, RED)
-    cv.text_c(sx + sw // 2, sy + sh - 38, "NO RETURN", 3, WHITE)
+    cv.rect(sx, sy + sh - 24, sw, 24, RED)
+    cv.text_c(sx + sw // 2, sy + sh - 19, "NO RETURN", 2, WHITE)
 
 
 def scene_shenzhen(cv, sx, sy, sw, sh):
-    """Panel 4: plane flying in over the Shenzhen skyline, APEC banner,
-    US and China flags at the talks."""
+    """Compact panel 4: plane flying in over the Shenzhen skyline,
+    APEC banner, US and China flags at the talks."""
     cv.rect(sx, sy, sw, sh, SKY)
-    cv.circle(sx + sw - 64, sy + 44, 26, SUN)
-    cv.ellipse(sx + 190, sy + 30, 48, 12, WHITE)  # clear of APEC banner
-    cv.ellipse(sx + 220, sy + 66, 40, 10, WHITE)
+    cv.circle(sx + sw - 48, sy + 22, 16, SUN)
+    cv.ellipse(sx + 170, sy + 16, 34, 8, WHITE)
+    cv.ellipse(sx + 190, sy + 40, 28, 7, WHITE)
     # APEC banner, top left
-    cv.rect(sx + 16, sy + 14, 118, 40, RED)
-    cv.text_c(sx + 75, sy + 24, "APEC", 3, WHITE)
+    cv.rect(sx + 12, sy + 8, 96, 30, RED)
+    cv.text_c(sx + 60, sy + 15, "APEC", 2, WHITE)
     # plane, upper middle, flying right with contrail
-    px, py = sx + 150, sy + 96
-    cv.line(sx + 16, py + 26, px - 6, py + 10, 3, WHITE)
-    cv.ellipse(px + 46, py + 8, 62, 12, WHITE)
-    cv.polygon([(px + 30, py + 4), (px + 52, py - 22), (px + 62, py + 4)],
+    px, py = sx + 130, sy + 52
+    cv.line(sx + 12, py + 18, px - 6, py + 8, 2, WHITE)
+    cv.ellipse(px + 36, py + 6, 48, 9, WHITE)
+    cv.polygon([(px + 24, py + 3), (px + 40, py - 16), (px + 48, py + 3)],
                WHITE)
-    cv.polygon([(px + 30, py + 12), (px + 48, py + 32), (px + 58, py + 12)],
+    cv.polygon([(px + 24, py + 9), (px + 36, py + 24), (px + 44, py + 9)],
                WHITE)
-    cv.polygon([(px + 96, py - 2), (px + 112, py - 20), (px + 116, py - 2)],
+    cv.polygon([(px + 74, py - 1), (px + 86, py - 14), (px + 90, py - 1)],
                WHITE)
-    cv.circle(px + 104, py + 6, 3, (40, 90, 160))      # windows
-    cv.circle(px + 88, py + 6, 3, (40, 90, 160))
-    cv.circle(px + 72, py + 6, 3, (40, 90, 160))
+    cv.circle(px + 80, py + 4, 2, (40, 90, 160))
+    cv.circle(px + 68, py + 4, 2, (40, 90, 160))
+    cv.circle(px + 56, py + 4, 2, (40, 90, 160))
     # Shenzhen skyline, bottom
     base = sy + sh
-    towers = [(0, 150, 64), (70, 196, 58), (134, 128, 60),
-              (200, 176, 62), (268, 96, 66), (340, 158, 62),
-              (408, 132, 60)]
+    towers = [(0, 62, 46), (52, 78, 42), (100, 52, 44),
+              (150, 70, 46), (202, 40, 48), (256, 62, 46),
+              (308, 54, 44), (358, 66, 46), (410, 58, 46)]
     for tx, th, tw in towers:
         cv.rect(sx + tx, base - th, tw, th, (28, 52, 96))
-        for wy in range(base - th + 12, base - 10, 20):
-            for wx in range(sx + tx + 10, sx + tx + tw - 8, 16):
-                cv.rect(wx, wy, 5, 7, (255, 220, 120))
+        for wy in range(base - th + 8, base - 6, 14):
+            for wx in range(sx + tx + 7, sx + tx + tw - 6, 12):
+                cv.rect(wx, wy, 4, 5, (255, 220, 120))
     # tallest tapered tower with antenna
-    cv.polygon([(sx + 268, base - 96), (sx + 282, base - 216),
-                (sx + 320, base - 216), (sx + 334, base - 96)],
+    cv.polygon([(sx + 202, base - 40), (sx + 212, base - 96),
+                (sx + 238, base - 96), (sx + 250, base - 40)],
                (20, 40, 80))
-    cv.rect(sx + 298, base - 246, 5, 32, (20, 40, 80))
-    cv.circle(sx + 300, base - 248, 4, RED)
-    for wy in range(base - 200, base - 10, 22):
-        cv.rect(sx + 292, wy, 5, 7, (255, 220, 120))
-        cv.rect(sx + 308, wy, 5, 7, (255, 220, 120))
+    cv.rect(sx + 223, base - 112, 4, 18, (20, 40, 80))
+    cv.circle(sx + 225, base - 114, 3, RED)
     # flags at the talks: US stripes, China red, on poles by the towers
-    for fx, cols in [(sx + 30, [(178, 34, 34), WHITE, (178, 34, 34)]),
+    for fx, cols in [(sx + 24, [(178, 34, 34), WHITE, (178, 34, 34)]),
                      (sx + 420, [(200, 22, 22), (200, 22, 22),
                                  (200, 22, 22)])]:
-        cv.rect(fx, base - 66, 4, 66, (60, 60, 60))
+        cv.rect(fx, base - 48, 3, 48, (60, 60, 60))
         for i, col in enumerate(cols):
-            cv.rect(fx + 4, base - 66 + i * 9, 34, 9, col)
-        if fx > sx + 400:
-            cv.circle(fx + 12, base - 61, 2, GOLD)
-            cv.circle(fx + 22, base - 58, 1, GOLD)
-            cv.circle(fx + 22, base - 52, 1, GOLD)
+            cv.rect(fx + 3, base - 48 + i * 7, 26, 7, col)
 
 
 # -------------------------------------------------------------- layout ----
@@ -407,29 +494,98 @@ PANELS = [
     ("TRUMP TO SHENZHEN", "APEC TALKS WITH XI, PUTIN", NAVY, scene_shenzhen),
 ]
 
+# 24 briefs: (headline, caption). Headline <= 39 chars, caption <= 78.
+BRIEFS_COL1 = [
+    ("GAZA AID PLEA",
+     "UK, AUSTRALIA, CANADA AND ITALY URGE ISRAEL TO OPEN CROSSINGS."),
+    ("DEPARDIEU ADMITS GUILT",
+     "FRENCH STAR DROPS APPEAL IN PARIS SEX ASSAULT CASE."),
+    ("JAPAN SCRAMBLES JETS",
+     "TWO RUSSIAN PLANES VIOLATE AIRSPACE, TOKYO PROTESTS."),
+    ("HOUTHIS ADVANCE IN YEMEN",
+     "GOVERNMENT TROOPS RETREAT FROM RED SEA COAST TO ADEN."),
+    ("RUSSIAN PLANE CRASHES",
+     "AN-12 DOWN IN KEMEROVO, ALL 19 ON BOARD KILLED."),
+    ("TANKER SINKS OFF BULGARIA",
+     "GAS TANKER GOES DOWN, ALL 19 CREW RESCUED."),
+    ("FRANCE STRIKES OVER COSTS",
+     "146,000 MARCH, 28,000 IN PARIS, UNIONS DEMAND RELIEF."),
+    ("MOLDOVA CLOSES AIRSPACE",
+     "RUSSIAN DRONE FLEW OVER CHISINAU, SANDU SAYS."),
+    ("US LOSES MEASLES STATUS",
+     "5,400 CASES, 10 DEAD, FIRST LOSS IN 26 YEARS."),
+    ("SETTLERS KILL WOMAN, 72",
+     "PALESTINIAN SHOT DEAD NEAR JERICHO, MINISTRY SAYS."),
+    ("HAITI RALLIES FOR BUKELE",
+     "THOUSANDS BACK SALVADORAN TROOPS FIGHTING GANGS."),
+    ("MONGOLIA LEADER RESIGNS",
+     "PRESIDENT KHURELSUKH QUITS AMID GRAFT SCANDAL."),
+]
+BRIEFS_COL2 = [
+    ("HOUTHIS HIT SAUDI PIPELINE",
+     "FIVE DRONES FIRED AT EAST-WEST PUMP STATIONS."),
+    ("MINES HIT MORE SHIPS",
+     "TWO MORE VESSELS STRUCK IN STRAIT OF HORMUZ."),
+    ("OIL EASES AS STOCKS RISE",
+     "US INVENTORIES UP, HORMUZ RISK LIMITS FALLS."),
+    ("US CURBS CHINA AI CHIPS",
+     "WASHINGTON BLOCKS REMOTE USE, BEIJING VOWS REPLY."),
+    ("US SOLDIER HELD IN BRITAIN",
+     "ARRESTED ON SPYING SUSPICION, IN US CUSTODY."),
+    ("QUAD SEALS MINERALS PACTS",
+     "TRUMP ANNOUNCES DEALS AT MANILA SUMMIT."),
+    ("INDIA JAPAN HOLD 2 PLUS 2",
+     "FOREIGN AND DEFENCE CHIEFS MEET IN TOKYO."),
+    ("XI PUSHES OPEN TRADE",
+     "CHINA HOSTS APEC AS SHENZHEN SUMMIT OPENS."),
+    ("NETANYAHU FACES VOTE PROBE",
+     "PM ACCUSED OF ELECTORAL INTERFERENCE."),
+    ("FRANCE ROLE IN UKRAINE",
+     "RFI REPORT REVEALS COVERT OPERATION, RUSSIA PROTESTS."),
+    ("HUANG TO FACE CONGRESS",
+     "EX NVIDIA CHIEF TO TESTIFY ON SECURITY BREACH."),
+    ("CRYPTO SLIDES IN EAST EUROPE",
+     "ACTIVITY DOWN 7.9 PERCENT IN A YEAR, STUDY FINDS."),
+]
+
 
 def build():
     cv = Canvas(W, H, PAPER)
     cv.frame(6, 6, W - 12, H - 12, 6, INK)
     # masthead
-    cv.text_c(W // 2, 30, "THE WORLD", 12, INK)
-    cv.hline(24, 128, W - 48, 3, INK)
-    cv.hline(24, 136, W - 48, 2, INK)
-    cv.text_c(W // 2, 148, "TUESDAY 17 NOVEMBER 2026", 3, INK)
-    cv.text_c(W // 2, 174, "WORLD NEWS IN PICTURES", 2, (90, 60, 30))
-    cv.hline(24, 198, W - 48, 3, INK)
-    # 2x2 panels
-    pw, ph = 488, 386
+    cv.text_c(W // 2, 20, "THE WORLD", 11, INK)
+    cv.hline(24, 104, W - 48, 3, INK)
+    cv.hline(24, 112, W - 48, 2, INK)
+    cv.text_c(W // 2, 120, "TUESDAY 17 NOVEMBER 2026", 2, INK)
+    cv.text_c(W // 2, 140, "WORLD NEWS IN PICTURES - 28 STORIES", 2,
+              (90, 60, 30))
+    cv.hline(24, 160, W - 48, 3, INK)
+    # world map strip
+    draw_map(cv)
+    # 2x2 anchor panels, compact scenes
+    pw, ph = 488, 205
     for i, (head, cap, strip, draw) in enumerate(PANELS):
         px = 16 + (i % 2) * (pw + 16)
-        py = 210 + (i // 2) * (ph + 16)
+        py = 288 + (i // 2) * (ph + 12)
         cv.rect(px, py, pw, ph, WHITE)
         cv.frame(px, py, pw, ph, 3, INK)
-        cv.rect(px + 3, py + 3, pw - 6, 42, strip)
-        cv.text_c(px + pw // 2, py + 14, head, 2, WHITE)
-        draw(cv, px + 8, py + 53, pw - 16, ph - 53 - 36)
-        cv.hline(px + 8, py + ph - 32, pw - 16, 2, INK)
-        cv.text_c(px + pw // 2, py + ph - 26, cap, 2, INK)
+        cv.rect(px + 3, py + 3, pw - 6, 36, strip)
+        cv.text_c(px + pw // 2, py + 13, head, 2, WHITE)
+        draw(cv, px + 8, py + 47, pw - 16, ph - 47 - 30)
+        cv.hline(px + 8, py + ph - 30, pw - 16, 2, INK)
+        cv.text_c(px + pw // 2, py + ph - 24, cap, 2, INK)
+    # briefs
+    cv.text(16, 722, "MORE FROM THE WORLD", 2, INK)
+    cv.text(1008 - cv.text_w("24 BRIEFS", 2), 722, "24 BRIEFS", 2, INK)
+    cv.hline(16, 744, 976, 2, INK)
+    for col, bx in enumerate((16, 520)):
+        briefs = BRIEFS_COL1 if col == 0 else BRIEFS_COL2
+        for j, (head, cap) in enumerate(briefs):
+            by = 752 + j * 21
+            cv.rect(bx, by + 4, 6, 6, RED)
+            cv.text(bx + 12, by, head, 2, INK)
+            cv.text(bx + 12, by + 14, cap, 1, GREY)
+    cv.vline(508, 752, 252, 2, (150, 140, 120))
     return cv
 
 
